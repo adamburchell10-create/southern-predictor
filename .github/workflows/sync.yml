@@ -1,0 +1,22 @@
+# DISABLED - see scripts/sync-now.ts and the README instead.
+#
+# The original plan was for this workflow to call the app's /api/cron/sync
+# endpoint on a schedule. In practice, footballwebpages.co.uk's Cloudflare
+# protection returns HTTP 403 to requests from well-known cloud/hosting IP
+# ranges - and that includes *both* Vercel's serverless functions *and*
+# GitHub Actions runners (confirmed by testing directly against each). So
+# this workflow can never succeed as written, and running it on a schedule
+# would just generate a stream of "workflow failed" emails.
+#
+# The actual sync now runs via scripts/sync-now.ts, executed on a schedule
+# from an environment Cloudflare doesn't block (see README). If you ever
+# move that job somewhere else, re-enable a variant of this workflow by
+# giving it a real `on: schedule` trigger again.
+name: Sync fixtures and results (disabled)
+on:
+  workflow_dispatch: {}
+jobs:
+  disabled:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "This workflow is intentionally disabled - see README.md"

@@ -73,21 +73,44 @@ in `lib/scraper.ts` may need a small update.
    `https://southern-predictor-yourname.vercel.app` - that's the link you'll send
    your friends.
 
-## 4. Turn on automatic fixture/result syncing (GitHub Actions - free)
+## 4. Keep fixtures/results syncing automatically
 
-This is what keeps fixtures, results and the leaderboard up to date without you
-lifting a finger.
+This turned out to be the trickiest part. footballwebpages.co.uk sits behind
+Cloudflare, and Cloudflare blocks requests from well-known cloud/hosting IP
+ranges - which includes **both** Vercel's serverless functions **and** GitHub
+Actions runners (confirmed by testing directly against each: same request,
+same headers, both get HTTP 403). A `.github/workflows/sync.yml` calling
+`/api/cron/sync` on a schedule, which is the "obvious" free approach, simply
+can't work here - it would just generate a stream of failure emails, so
+that workflow is disabled in this repo.
 
-1. In your GitHub repository, go to **Settings -> Secrets and variables ->
-   Actions**.
-2. Add two repository secrets:
-   - `APP_URL` - your Vercel URL from step 3, with no trailing slash (e.g.
-     `https://southern-predictor-yourname.vercel.app`)
-   - `CRON_SECRET` - the exact same random string you used in step 3
-3. That's it - the workflow in `.github/workflows/sync.yml` is already set up to
-   run every 30 minutes. You can trigger it immediately from the **Actions** tab
-   (choose "Sync fixtures and results" -> **Run workflow**) rather than waiting
-   for the schedule, so fixtures appear straight away.
+What does work: `scripts/sync-now.ts` shells out to `curl` (which, for
+reasons that come down to TLS-fingerprinting rather than anything about the
+request itself, isn't blocked the way Node's `fetch()` is) and writes
+straight into Supabase. It just needs to run somewhere with an ordinary
+outbound IP, on a schedule. Options, roughly in order of effort:
+
+- **Easiest**: if you have any always-on computer (a Raspberry Pi, an old
+  laptop, a NAS), add a cron job there that does:
+  ```bash
+  git clone https://github.com/<you>/southern-predictor.git   # first time only
+  cd southern-predictor && git pull && npm install
+  SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... npx tsx scripts/sync-now.ts
+  ```
+  Run it every 30-60 minutes via `crontab -e`.
+- **No spare computer**: a free-tier VM that isn't on a major cloud
+  provider's flagged ranges (a lot of "cloud" is flagged; test with `curl`
+  from it first), or a service built for exactly this (running scheduled
+  jobs from residential-ish egress).
+- **What's actually running right now**: for this deployment, the sync is
+  scheduled as a recurring job that runs `scripts/sync-now.ts` directly
+  against your Supabase project - so you don't need to do anything for it to
+  keep working, but it's worth knowing where the data's coming from if it
+  ever needs troubleshooting.
+
+Either way, run `npx tsx scripts/sync-now.ts` by hand any time you want an
+immediate refresh (e.g. right after deploying, so fixtures show up straight
+away instead of waiting for the next scheduled run).
 
 ## 5. Play
 
