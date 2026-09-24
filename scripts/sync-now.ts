@@ -14,8 +14,16 @@
  * deployed app reads from).
  *
  * Requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (and optionally
- * LEAGUE_SLUG) as environment variables.
+ * LEAGUE_SLUG) as environment variables - or just drop them in a `.env.local`
+ * file next to this project (gitignored, never committed) and they'll be
+ * picked up automatically, so you can run this with a plain:
+ *
+ *   npx tsx scripts/sync-now.ts
  */
+import dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
+dotenv.config(); // fall back to a plain .env if that's what you used instead
+
 import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { scrapeLeague } from "../lib/scraper";
 import { scorePrediction } from "../lib/scoring";
