@@ -1,0 +1,10 @@
+name: Test fetch from GH Actions
+on: { workflow_dispatch: {} }
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: curl the fixtures page
+        run: |
+          curl -s -o /dev/null -w "HTTP:%{http_code}\n" -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36" "https://www.footballwebpages.co.uk/southern-football-league-division-one-central/fixtures-results"
+          curl -s -o /dev/null -w "HTTP:%{http_code}\n" "https://www.footballwebpages.co.uk/southern-football-league-division-one-central/fixtures-results"
