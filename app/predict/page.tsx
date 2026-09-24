@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import WeekPager from "../WeekPager";
+import { defaultWeekIndex, groupByWeek } from "../weekUtils";
 
 interface MatchApi {
   id: string;
@@ -20,42 +22,16 @@ interface OwnPred {
   points: number | null;
 }
 
-interface OtherPred {
-  match_id: string;
-  home_pred: number;
-  away_pred: number;
-  points: number | null;
-  player: { name: string } | null;
-}
-
-function startOfWeek(d: Date): string {
-  // Monday-start week bucket, used purely to group fixtures for display.
-  const date = new Date(d);
-  const day = (date.getDay() + 6) % 7; // 0 = Monday
-  date.setDate(date.getDate() - day);
-  date.setHours(0, 0, 0, 0);
-  return date.toISOString();
-}
-
-function weekLabel(isoWeekStart: string): string {
-  const start = new Date(isoWeekStart);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 6);
-  const fmt = (d: Date) => d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-  return `Week of ${fmt(start)} – ${fmt(end)}`;
-}
-
 export default function PredictPage() {
   const router = useRouter();
-  const [me, setMe] = useState<{ id: string; name: string } | null>(null);
   const [matches, setMatches] = useState<MatchApi[]>([]);
   const [own, setOwn] = useState<Record<string, OwnPred>>({});
-  const [others, setOthers] = useState<Record<string, OtherPred[]>>({});
   const [pendingCounts, setPendingCounts] = useState<Record<string, number>>({});
   const [drafts, setDrafts] = useState<Record<string, { home: string; away: string }>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [savedFlash, setSavedFlash] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
+  const [weekIndex, setWeekIndex] = useState<number | null>(null);
 
   async function loadAll() {
     const joinRes = await fetch("/api/join");
@@ -64,7 +40,6 @@ export default function PredictPage() {
       router.replace("/");
       return;
     }
-    setMe(joinData.player);
 
     const [fixturesRes, predsRes] = await Promise.all([
       fetch("/api/fixtures"),
@@ -78,13 +53,6 @@ export default function PredictPage() {
     const ownMap: Record<string, OwnPred> = {};
     for (const p of predsData.own || []) ownMap[p.match_id] = p;
     setOwn(ownMap);
-
-    const othersMap: Record<string, OtherPred[]> = {};
-    for (const p of predsData.others || []) {
-      if (!othersMap[p.match_id]) othersMap[p.match_id] = [];
-      othersMap[p.match_id].push(p);
-    }
-    setOthers(othersMap);
     setPendingCounts(predsData.pendingCounts || {});
 
     const nextDrafts: Record<string, { home: string; away: string }> = {};
@@ -100,19 +68,15 @@ export default function PredictPage() {
     loadAll();
   }, []);
 
-  const grouped = useMemo(() => {
-    const now = Date.now();
-    const upcoming = matches.filter(
-      (m) => m.status !== "finished" || new Date(m.kickoff_at).getTime() > now - 1000 * 60 * 60 * 24 * 30
-    );
-    const buckets = new Map<string, MatchApi[]>();
-    for (const m of upcoming) {
-      const key = startOfWeek(new Date(m.kickoff_at));
-      if (!buckets.has(key)) buckets.set(key, []);
-      buckets.get(key)!.push(m);
+  const grouped = useMemo(() => groupByWeek(matches, (m) => m.kickoff_at), [matches]);
+
+  // Land on the current (or nearest upcoming) week the first time fixtures load,
+  // but don't yank the user back there on every background refresh afterwards.
+  useEffect(() => {
+    if (weekIndex === null && grouped.length > 0) {
+      setWeekIndex(defaultWeekIndex(grouped));
     }
-    return Array.from(buckets.entries()).sort(([a], [b]) => (a < b ? -1 : 1));
-  }, [matches]);
+  }, [grouped, weekIndex]);
 
   function updateDraft(matchId: string, field: "home" | "away", value: string) {
     const cleaned = value.replace(/[^0-9]/g, "").slice(0, 2);
@@ -146,7 +110,7 @@ export default function PredictPage() {
     }
   }
 
-  if (loading) return <div className="empty-state">Loading fixtures…</div>;
+  if (loading || weekIndex === null) return <div className="empty-state">Loading fixtures…</div>;
 
   if (matches.length === 0) {
     return (
@@ -157,118 +121,114 @@ export default function PredictPage() {
     );
   }
 
+  const [weekKey, weekMatches] = grouped[weekIndex];
+
   return (
     <div>
-      {grouped.map(([weekKey, weekMatches]) => (
-        <div key={weekKey}>
-          <div className="week-heading">{weekLabel(weekKey)}</div>
-          <div className="card">
-            {weekMatches.map((m) => {
-              const started = new Date(m.kickoff_at).getTime() <= Date.now();
-              const finished = m.status === "finished";
-              const postponed = m.status === "postponed" && !started;
-              const draft = drafts[m.id] || { home: "", away: "" };
-              const myPoints = own[m.id]?.points;
-              const otherPreds = others[m.id] || [];
+      <WeekPager
+        weekKey={weekKey}
+        index={weekIndex}
+        count={grouped.length}
+        onPrev={() => setWeekIndex((i) => Math.max(0, (i ?? 0) - 1))}
+        onNext={() => setWeekIndex((i) => Math.min(grouped.length - 1, (i ?? 0) + 1))}
+      />
+      <div className="card">
+        {weekMatches.map((m) => {
+          const started = new Date(m.kickoff_at).getTime() <= Date.now();
+          const finished = m.status === "finished";
+          const postponed = m.status === "postponed" && !started;
+          const draft = drafts[m.id] || { home: "", away: "" };
+          const myPoints = own[m.id]?.points;
 
-              return (
-                <div key={m.id} className="match-row" style={{ flexDirection: "column", alignItems: "stretch" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div className="team">{m.home_team}</div>
-                    <div className="score-inputs">
-                      {finished ? (
-                        <>
-                          <strong>{m.home_score}</strong>
-                          <span>–</span>
-                          <strong>{m.away_score}</strong>
-                        </>
-                      ) : (
-                        <>
-                          <input
-                            inputMode="numeric"
-                            disabled={started || postponed}
-                            value={draft.home}
-                            onChange={(e) => updateDraft(m.id, "home", e.target.value)}
-                          />
-                          <span>–</span>
-                          <input
-                            inputMode="numeric"
-                            disabled={started || postponed}
-                            value={draft.away}
-                            onChange={(e) => updateDraft(m.id, "away", e.target.value)}
-                          />
-                        </>
-                      )}
-                    </div>
-                    <div className="team away">{m.away_team}</div>
-                  </div>
-
-                  <div className="meta-row">
-                    <span>
-                      {new Date(m.kickoff_at).toLocaleString(undefined, {
-                        weekday: "short",
-                        day: "numeric",
-                        month: "short",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                    {finished && <span className="badge finished">Full time</span>}
-                    {postponed && <span className="badge postponed">Postponed</span>}
-                    {!finished && !postponed && started && <span className="badge locked">Kicked off</span>}
-                    {!finished && !postponed && !started && <span className="badge open">Open</span>}
-                  </div>
-
-                  {!finished && !postponed && !started && (
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-                      <span style={{ fontSize: 12, color: "#94a3b8" }}>
-                        {pendingCounts[m.id] ? `${pendingCounts[m.id]} friend(s) have predicted` : "No predictions yet"}
-                      </span>
-                      <button
-                        className="primary"
-                        style={{ width: "auto", padding: "8px 14px", fontSize: 13 }}
-                        disabled={saving[m.id] || draft.home === "" || draft.away === ""}
-                        onClick={() => save(m.id)}
-                      >
-                        {savedFlash[m.id] ? "Saved ✓" : saving[m.id] ? "Saving…" : "Save prediction"}
-                      </button>
-                    </div>
-                  )}
-
-                  {(started || finished) && own[m.id] && (
-                    <div className="others-preds">
-                      <span>
-                        You: {own[m.id].home_pred}-{own[m.id].away_pred}
-                        {typeof myPoints === "number" && (
-                          <span className="points-pill" style={{ marginLeft: 6 }}>
-                            +{myPoints} pt{myPoints === 1 ? "" : "s"}
-                          </span>
-                        )}
-                      </span>
-                      {otherPreds.map((p) => (
-                        <span key={p.player?.name}>
-                          {p.player?.name}: {p.home_pred}-{p.away_pred}
-                          {typeof p.points === "number" && (
-                            <span className="points-pill" style={{ marginLeft: 6 }}>
-                              +{p.points}
-                            </span>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {(started || finished) && !own[m.id] && (
-                    <div className="others-preds">
-                      <span>You didn&rsquo;t predict this one.</span>
-                    </div>
+          return (
+            <div key={m.id} className="match-row" style={{ flexDirection: "column", alignItems: "stretch" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div className="team">{m.home_team}</div>
+                <div className="score-inputs">
+                  {finished ? (
+                    <>
+                      <strong>{m.home_score}</strong>
+                      <span>–</span>
+                      <strong>{m.away_score}</strong>
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        inputMode="numeric"
+                        disabled={started || postponed}
+                        value={draft.home}
+                        onChange={(e) => updateDraft(m.id, "home", e.target.value)}
+                      />
+                      <span>–</span>
+                      <input
+                        inputMode="numeric"
+                        disabled={started || postponed}
+                        value={draft.away}
+                        onChange={(e) => updateDraft(m.id, "away", e.target.value)}
+                      />
+                    </>
                   )}
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+                <div className="team away">{m.away_team}</div>
+              </div>
+
+              <div className="meta-row">
+                <span>
+                  {new Date(m.kickoff_at).toLocaleString(undefined, {
+                    weekday: "short",
+                    day: "numeric",
+                    month: "short",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+                {finished && <span className="badge finished">Full time</span>}
+                {postponed && <span className="badge postponed">Postponed</span>}
+                {!finished && !postponed && started && <span className="badge locked">Kicked off</span>}
+                {!finished && !postponed && !started && <span className="badge open">Open</span>}
+              </div>
+
+              {!finished && !postponed && !started && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                  <span style={{ fontSize: 12, color: "#94a3b8" }}>
+                    {pendingCounts[m.id] ? `${pendingCounts[m.id]} friend(s) have predicted` : "No predictions yet"}
+                  </span>
+                  <button
+                    className="primary"
+                    style={{ width: "auto", padding: "8px 14px", fontSize: 13 }}
+                    disabled={saving[m.id] || draft.home === "" || draft.away === ""}
+                    onClick={() => save(m.id)}
+                  >
+                    {savedFlash[m.id] ? "Saved ✓" : saving[m.id] ? "Saving…" : "Save prediction"}
+                  </button>
+                </div>
+              )}
+
+              {(started || finished) && own[m.id] && (
+                <div className="others-preds">
+                  <span>
+                    You: {own[m.id].home_pred}-{own[m.id].away_pred}
+                    {typeof myPoints === "number" && (
+                      <span className="points-pill" style={{ marginLeft: 6 }}>
+                        +{myPoints} pt{myPoints === 1 ? "" : "s"}
+                      </span>
+                    )}
+                  </span>
+                  <span style={{ marginLeft: 10 }}>
+                    Check the <strong>Friends</strong> tab to see how everyone else did.
+                  </span>
+                </div>
+              )}
+
+              {(started || finished) && !own[m.id] && (
+                <div className="others-preds">
+                  <span>You didn&rsquo;t predict this one.</span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

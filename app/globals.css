@@ -84,6 +84,47 @@ a {
   margin-bottom: 14px;
 }
 
+.week-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin: 4px 0 16px;
+}
+
+.week-pager-label {
+  text-align: center;
+  min-width: 150px;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.week-pager-sub {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
+.week-nav-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card-2);
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.week-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .week-heading {
   font-size: 13px;
   font-weight: 700;
@@ -265,6 +306,41 @@ table.leaderboard tr.me td {
 .others-preds span {
   display: inline-block;
   margin-right: 10px;
+}
+
+.friend-match-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.friend-pred-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.friend-pred-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--card-2);
+}
+
+.friend-pred-row.me {
+  border: 1px solid var(--accent);
+}
+
+.friend-pred-score {
+  font-weight: 700;
 }
 
 .empty-state {

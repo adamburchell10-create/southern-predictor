@@ -17,6 +17,9 @@ export default function NavBar() {
         <Link href="/predict" className={isActive("/predict")}>
           Predict
         </Link>
+        <Link href="/friends" className={isActive("/friends")}>
+          Friends
+        </Link>
         <Link href="/leaderboard" className={isActive("/leaderboard")}>
           Leaderboard
         </Link>
