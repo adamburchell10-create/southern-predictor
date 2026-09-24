@@ -26,6 +26,14 @@ export function supabaseAdmin() {
 
   cached = createClient<any>(url, key, {
     auth: { persistSession: false },
+    // supabase-js makes its requests with fetch() under the hood, and
+    // Next.js patches the global fetch to cache GET requests by default -
+    // even inside a route handler marked `force-dynamic`. Without this, the
+    // leaderboard/fixtures/predictions endpoints can keep serving a stale
+    // snapshot from the moment the serverless function first warmed up.
+    global: {
+      fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
+    },
   });
   return cached;
 }
