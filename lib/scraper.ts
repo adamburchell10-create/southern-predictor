@@ -1,5 +1,9 @@
 import * as cheerio from "cheerio";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type { MatchStatus, ScrapedMatch } from "./types";
+
+const execFileAsync = promisify(execFile);
 
 const BASE = "https://www.footballwebpages.co.uk";
 
@@ -8,11 +12,19 @@ const BASE = "https://www.footballwebpages.co.uk";
 // available for a friends-only prediction game like this one. Their
 // robots.txt (checked at build time: only /admin/ is disallowed) permits
 // crawling the public fixtures pages, so instead we politely read the same
-// public fixtures/results page a human visitor would see. Keep the request
-// rate low (the GitHub Actions workflow in this project runs at most every
-// 30 minutes) and this User-Agent identifies what's fetching it.
+// public fixtures/results page a human visitor would see, at a low rate.
+//
+// One quirk found while building this: the site's Cloudflare protection
+// returns HTTP 403 for Node's built-in fetch() (undici) even with a normal
+// browser User-Agent and headers - almost certainly a TLS/HTTP client
+// fingerprint block rather than anything about the request content, since
+// plain `curl` with byte-for-byte identical headers succeeds every time.
+// So this shells out to curl instead of using fetch(). That means curl
+// needs to be on PATH wherever this runs - true for local dev, and true for
+// the scheduled sync job, but notably *not* true for typical serverless
+// platforms, some of which don't ship a shell at all.
 const USER_AGENT =
-  "SouthernPredictorBot/1.0 (+personal, non-commercial football prediction game for friends)";
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 
 const MONTH_NAMES = [
   "january",
@@ -30,16 +42,32 @@ const MONTH_NAMES = [
 ];
 
 async function fetchHtml(url: string): Promise<string> {
-  const res = await fetch(url, {
-    headers: { "User-Agent": USER_AGENT },
-    // Football fixtures don't change second-to-second; avoid caching issues
-    // in serverless environments by always asking for a fresh copy.
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new Error(`Failed to fetch ${url}: HTTP ${res.status}`);
+  const { stdout } = await execFileAsync(
+    "curl",
+    [
+      "-s",
+      "-w",
+      "\n__HTTP_STATUS__%{http_code}",
+      "-H",
+      `User-Agent: ${USER_AGENT}`,
+      "-H",
+      "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "-H",
+      "Accept-Language: en-GB,en;q=0.9",
+      url,
+    ],
+    { maxBuffer: 10 * 1024 * 1024 }
+  );
+
+  const marker = "\n__HTTP_STATUS__";
+  const idx = stdout.lastIndexOf(marker);
+  const body = idx >= 0 ? stdout.slice(0, idx) : stdout;
+  const status = idx >= 0 ? Number(stdout.slice(idx + marker.length).trim()) : 0;
+
+  if (status < 200 || status >= 300) {
+    throw new Error(`Failed to fetch ${url}: HTTP ${status}`);
   }
-  return res.text();
+  return body;
 }
 
 /** Converts a UK wall-clock date/time (Europe/London) into a UTC ISO string,
@@ -210,23 +238,28 @@ export async function scrapeMonth(
  * ahead and behind, so predictions can be made as far in advance as the
  * site itself publishes and recent results are picked up for scoring.
  */
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function scrapeLeague(
   leagueSlug: string,
   { monthsAhead = 8, monthsBehind = 1 }: { monthsAhead?: number; monthsBehind?: number } = {}
 ): Promise<ScrapedMatch[]> {
   const now = new Date();
-  const requests: Array<Promise<ScrapedMatch[]>> = [];
+  const bySourceId = new Map<string, ScrapedMatch>();
 
+  // Fetched one month at a time with a short gap between requests: firing
+  // ~10 requests at once (e.g. via Promise.all) is bursty enough to trip
+  // Cloudflare's bot heuristics on this site, even though sequential
+  // requests from the same IP sail through without issue.
   for (let i = -monthsBehind; i <= monthsAhead; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
     const monthName = i === 0 ? undefined : MONTH_NAMES[d.getMonth()];
-    requests.push(scrapeMonth(leagueSlug, monthName));
+    const monthMatches = await scrapeMonth(leagueSlug, monthName);
+    for (const m of monthMatches) bySourceId.set(m.sourceMatchId, m);
+    if (i < monthsAhead) await sleep(600);
   }
 
-  const results = await Promise.all(requests);
-  const bySourceId = new Map<string, ScrapedMatch>();
-  for (const monthMatches of results) {
-    for (const m of monthMatches) bySourceId.set(m.sourceMatchId, m);
-  }
   return Array.from(bySourceId.values());
 }

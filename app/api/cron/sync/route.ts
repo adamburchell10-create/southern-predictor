@@ -15,6 +15,17 @@ export async function POST(req: NextRequest) {
   const provided = req.headers.get("x-cron-secret");
   if (!secret || provided !== secret) return unauthorized();
 
+  try {
+    return await runSync();
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined },
+      { status: 500 }
+    );
+  }
+}
+
+async function runSync() {
   const leagueSlug = process.env.LEAGUE_SLUG || "southern-football-league-division-one-central";
   const db = supabaseAdmin();
 
