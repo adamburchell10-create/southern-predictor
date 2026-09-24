@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import WeekPager from "../WeekPager";
-import { defaultWeekIndex, groupByWeek } from "../weekUtils";
+import { defaultMatchweekIndex, groupByMatchweek, isCurrentMatchweek } from "../weekUtils";
 
 interface MatchApi {
   id: string;
@@ -68,13 +68,15 @@ export default function PredictPage() {
     loadAll();
   }, []);
 
-  const grouped = useMemo(() => groupByWeek(matches, (m) => m.kickoff_at), [matches]);
+  const getKickoff = (m: MatchApi) => m.kickoff_at;
+  const grouped = useMemo(() => groupByMatchweek(matches, getKickoff), [matches]);
 
-  // Land on the current (or nearest upcoming) week the first time fixtures load,
-  // but don't yank the user back there on every background refresh afterwards.
+  // Land on the current (or nearest upcoming) matchweek the first time
+  // fixtures load, but don't yank the user back there on every background
+  // refresh afterwards.
   useEffect(() => {
     if (weekIndex === null && grouped.length > 0) {
-      setWeekIndex(defaultWeekIndex(grouped));
+      setWeekIndex(defaultMatchweekIndex(grouped, getKickoff));
     }
   }, [grouped, weekIndex]);
 
@@ -121,19 +123,21 @@ export default function PredictPage() {
     );
   }
 
-  const [weekKey, weekMatches] = grouped[weekIndex];
+  const current = grouped[weekIndex];
 
   return (
     <div>
       <WeekPager
-        weekKey={weekKey}
+        label={current.label}
+        kind={current.kind}
+        isCurrent={isCurrentMatchweek(current, getKickoff)}
         index={weekIndex}
         count={grouped.length}
         onPrev={() => setWeekIndex((i) => Math.max(0, (i ?? 0) - 1))}
         onNext={() => setWeekIndex((i) => Math.min(grouped.length - 1, (i ?? 0) + 1))}
       />
       <div className="card">
-        {weekMatches.map((m) => {
+        {current.items.map((m) => {
           const started = new Date(m.kickoff_at).getTime() <= Date.now();
           const finished = m.status === "finished";
           const postponed = m.status === "postponed" && !started;

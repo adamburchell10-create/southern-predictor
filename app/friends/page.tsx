@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import WeekPager from "../WeekPager";
-import { defaultWeekIndex, groupByWeek } from "../weekUtils";
+import { groupByMatchweek, isCurrentMatchweek } from "../weekUtils";
 
 interface MatchApi {
   id: string;
@@ -72,7 +72,8 @@ export default function FriendsPage() {
     return matches.filter((m) => new Date(m.kickoff_at).getTime() <= now);
   }, [matches]);
 
-  const grouped = useMemo(() => groupByWeek(startedMatches, (m) => m.kickoff_at), [startedMatches]);
+  const getKickoff = (m: MatchApi) => m.kickoff_at;
+  const grouped = useMemo(() => groupByMatchweek(startedMatches, getKickoff), [startedMatches]);
 
   useEffect(() => {
     if (weekIndex === null && grouped.length > 0) {
@@ -92,18 +93,20 @@ export default function FriendsPage() {
   }
 
   const idx = weekIndex ?? grouped.length - 1;
-  const [weekKey, weekMatches] = grouped[idx];
+  const current = grouped[idx];
 
   return (
     <div>
       <WeekPager
-        weekKey={weekKey}
+        label={current.label}
+        kind={current.kind}
+        isCurrent={isCurrentMatchweek(current, getKickoff)}
         index={idx}
         count={grouped.length}
         onPrev={() => setWeekIndex(Math.max(0, idx - 1))}
         onNext={() => setWeekIndex(Math.min(grouped.length - 1, idx + 1))}
       />
-      {weekMatches.map((m) => {
+      {current.items.map((m) => {
         const preds = predsByMatch[m.id] || [];
         const finished = m.status === "finished";
         return (
