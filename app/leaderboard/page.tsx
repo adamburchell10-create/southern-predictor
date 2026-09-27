@@ -37,7 +37,8 @@ export default function LeaderboardPage() {
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Leaderboard</h2>
       <p style={{ color: "#94a3b8", fontSize: 13, marginTop: -6 }}>
-        3 pts exact score · 1.5 pts correct result + goal difference · 1 pt correct result only
+        3 pts exact score · 1.5 pts close (same goal difference, or within 1 goal overall) · 1 pt
+        correct result only
       </p>
       <table className="leaderboard">
         <thead>
@@ -47,7 +48,7 @@ export default function LeaderboardPage() {
             <th>Pts</th>
             <th>Exact</th>
             <th>Close</th>
-            <th>Correct</th>
+            <th>Result</th>
           </tr>
         </thead>
         <tbody>

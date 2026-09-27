@@ -11,10 +11,21 @@ function check(label: string, actual: unknown, expected: unknown) {
 
 console.log("--- scoring.ts ---");
 check("exact score", scorePrediction(2, 1, 2, 1), 3);
-check("close (same diff, home win)", scorePrediction(2, 1, 3, 2), 1.5);
-check("close (same diff, draw)", scorePrediction(0, 0, 2, 2), 1.5);
-check("correct result only (home win, wrong diff)", scorePrediction(1, 0, 4, 1), 1);
-check("correct result only (away win, wrong diff)", scorePrediction(0, 1, 0, 3), 1);
+check("close (same goal difference, home win)", scorePrediction(2, 1, 3, 2), 1.5);
+check("close (same goal difference, draw)", scorePrediction(0, 0, 2, 2), 1.5);
+check("close (same goal difference, off by 2 total - still same margin)", scorePrediction(1, 3, 0, 2), 1.5);
+check(
+  "close (1 goal off in total, different margin) - Barton Rovers 0-2, predicted 1-2",
+  scorePrediction(1, 2, 0, 2),
+  1.5
+);
+check(
+  "close (1 goal off in total, different margin) - MK Irish 3-1, predicted 2-1",
+  scorePrediction(2, 1, 3, 1),
+  1.5
+);
+check("correct result only (home win, more than 1 goal off, different margin)", scorePrediction(1, 0, 4, 1), 1);
+check("correct result only (away win, more than 1 goal off, different margin)", scorePrediction(0, 1, 0, 3), 1);
 check("wrong result", scorePrediction(2, 0, 1, 1), 0);
 check("wrong result (picked away, actual home)", scorePrediction(0, 2, 2, 0), 0);
 check("draw predicted, actual home win", scorePrediction(1, 1, 2, 1), 0);
