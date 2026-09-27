@@ -24,6 +24,14 @@ interface PredEntry {
   isMe: boolean;
 }
 
+function pointsLabel(points: number | null): { text: string; className: string } | null {
+  if (points === null || typeof points !== "number") return null;
+  if (points === 3) return { text: "Exact 3", className: "pill-exact" };
+  if (points === 1.5) return { text: "Close 1.5", className: "pill-close" };
+  if (points === 1) return { text: "Result 1", className: "pill-result" };
+  return { text: "Wrong 0", className: "pill-wrong" };
+}
+
 export default function FriendsPage() {
   const router = useRouter();
   const [matches, setMatches] = useState<MatchApi[]>([]);
@@ -149,21 +157,24 @@ export default function FriendsPage() {
               </div>
             ) : (
               <div className="friend-pred-list">
-                {preds.map((p) => (
-                  <div key={p.name} className={`friend-pred-row ${p.isMe ? "me" : ""}`}>
-                    <span>{p.isMe ? `${p.name} (you)` : p.name}</span>
-                    <span>
-                      <span className="friend-pred-score">
-                        {p.home_pred}-{p.away_pred}
-                      </span>
-                      {typeof p.points === "number" && (
-                        <span className="points-pill" style={{ marginLeft: 8 }}>
-                          +{p.points}
+                {preds.map((p) => {
+                  const label = pointsLabel(p.points);
+                  return (
+                    <div key={p.name} className={`friend-pred-row ${p.isMe ? "me" : ""}`}>
+                      <span>{p.isMe ? `${p.name} (you)` : p.name}</span>
+                      <span>
+                        <span className="friend-pred-score">
+                          {p.home_pred}-{p.away_pred}
                         </span>
-                      )}
-                    </span>
-                  </div>
-                ))}
+                        {label && (
+                          <span className={`points-pill ${label.className}`} style={{ marginLeft: 8 }}>
+                            {label.text}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
