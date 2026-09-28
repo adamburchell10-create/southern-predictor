@@ -254,6 +254,39 @@ a {
   color: var(--muted);
 }
 
+.form-badges {
+  display: flex;
+  gap: 3px;
+  margin-top: 3px;
+}
+
+.form-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.form-badge.form-w {
+  background: rgba(34, 197, 94, 0.22);
+  color: var(--accent);
+}
+
+.form-badge.form-d {
+  background: rgba(148, 163, 184, 0.25);
+  color: var(--muted);
+}
+
+.form-badge.form-l {
+  background: rgba(239, 68, 68, 0.22);
+  color: var(--danger);
+}
+
 button.primary {
   background: var(--accent);
   color: #04150a;

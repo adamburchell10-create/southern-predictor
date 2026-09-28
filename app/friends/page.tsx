@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import WeekPager from "../WeekPager";
 import { groupByMatchweek, isCurrentMatchweek } from "../weekUtils";
+import { ordinal } from "@/lib/format";
 
 interface MatchApi {
   id: string;
@@ -38,6 +39,7 @@ export default function FriendsPage() {
   const [predsByMatch, setPredsByMatch] = useState<Record<string, PredEntry[]>>({});
   const [loading, setLoading] = useState(true);
   const [weekIndex, setWeekIndex] = useState<number | null>(null);
+  const [positions, setPositions] = useState<Record<string, number>>({});
 
   useEffect(() => {
     async function load() {
@@ -48,14 +50,20 @@ export default function FriendsPage() {
         return;
       }
 
-      const [fixturesRes, predsRes] = await Promise.all([
+      const [fixturesRes, predsRes, standingsRes] = await Promise.all([
         fetch("/api/fixtures"),
         fetch("/api/predictions"),
+        fetch("/api/standings"),
       ]);
       const fixturesData = await fixturesRes.json();
       const predsData = await predsRes.json();
+      const standingsData = await standingsRes.json();
 
       setMatches(fixturesData.matches || []);
+
+      const positionMap: Record<string, number> = {};
+      for (const s of standingsData.standings || []) positionMap[s.team_name] = s.position;
+      setPositions(positionMap);
 
       const byMatch: Record<string, PredEntry[]> = {};
       for (const p of predsData.own || []) {
@@ -103,6 +111,11 @@ export default function FriendsPage() {
   const idx = weekIndex ?? grouped.length - 1;
   const current = grouped[idx];
 
+  function teamLabel(name: string) {
+    const pos = positions[name];
+    return pos ? `${name} (${ordinal(pos)})` : name;
+  }
+
   return (
     <div>
       <WeekPager
@@ -120,7 +133,7 @@ export default function FriendsPage() {
         return (
           <div key={m.id} className="card">
             <div className="friend-match-header">
-              <span>{m.home_team}</span>
+              <span>{teamLabel(m.home_team)}</span>
               {finished ? (
                 <span>
                   {m.home_score} – {m.away_score}
@@ -128,7 +141,7 @@ export default function FriendsPage() {
               ) : (
                 <span style={{ color: "#94a3b8", fontSize: 13 }}>vs</span>
               )}
-              <span>{m.away_team}</span>
+              <span>{teamLabel(m.away_team)}</span>
             </div>
             <div className="meta-row" style={{ justifyContent: "center" }}>
               <span>

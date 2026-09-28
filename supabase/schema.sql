@@ -43,6 +43,26 @@ create table if not exists predictions (
 create index if not exists predictions_match_idx on predictions (match_id);
 create index if not exists predictions_player_idx on predictions (player_id);
 
+-- One row per team, kept in sync from footballwebpages.co.uk's league table.
+-- Used to show each team's current league position next to their name.
+create table if not exists standings (
+  id uuid primary key default gen_random_uuid(),
+  team_name text not null unique,
+  position int not null,
+  played int,
+  won int,
+  drawn int,
+  lost int,
+  points int,
+  form text,                             -- last 5 results, oldest to newest, e.g. 'L,D,W,W,W'
+  updated_at timestamptz not null default now()
+);
+
+-- Existing databases created before the `form` column was added: this is a
+-- no-op if the column already exists (fresh installs get it from the
+-- `create table` above).
+alter table standings add column if not exists form text;
+
 -- Nothing else to add: the app's server-side API routes use the Supabase
 -- service-role key, so no Row Level Security policies are required (the
 -- database is never reached directly from a friend's browser).

@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { MatchStatus, ScrapedMatch } from "./types";
+import type { MatchStatus, ScrapedMatch, ScrapedStanding } from "./types";
 
 const execFileAsync = promisify(execFile);
 
@@ -262,4 +262,96 @@ export async function scrapeLeague(
   }
 
   return Array.from(bySourceId.values());
+}
+
+/**
+ * Scrapes the current league table (standings) for a competition, giving
+ * each team's league position plus played/won/drawn/lost/points.
+ *
+ * The table's played/won/drawn/lost/points columns don't all carry stable
+ * class names (some are plain `<td>` with no class at all), but they're
+ * always the last 8 cells of the row in a fixed order: played, won, drawn,
+ * lost, goals-for, goals-against, goal-difference, points. Reading them by
+ * position from the end of the row is more robust than relying on classes
+ * that could change with responsive breakpoints.
+ */
+export async function scrapeLeagueTable(leagueSlug: string): Promise<ScrapedStanding[]> {
+  const url = `${BASE}/${leagueSlug}/league-table`;
+  const html = await fetchHtml(url);
+  const $ = cheerio.load(html);
+
+  const standings: ScrapedStanding[] = [];
+
+  $("table.league-table tbody tr").each((_, el) => {
+    const row = $(el);
+
+    const positionText = row.find("td.position").first().text().trim();
+    const position = Number(positionText);
+    if (!Number.isFinite(position)) return;
+
+    const teamName = row.find("td.team a").first().text().trim() || row.find("td.team").first().text().trim();
+    if (!teamName) return;
+
+    const cellTexts = row
+      .find("td")
+      .map((__, td) => $(td).text().trim())
+      .get();
+
+    const toNum = (text: string | undefined): number | null => {
+      if (text === undefined) return null;
+      const n = Number(text.replace(/^\+/, ""));
+      return Number.isFinite(n) ? n : null;
+    };
+
+    // Last 8 cells: played, won, drawn, lost, goals-for, goals-against,
+    // goal-difference, points.
+    const tail = cellTexts.slice(-8);
+    const [played, won, drawn, lost, , , , points] = tail;
+
+    standings.push({
+      teamName,
+      position,
+      played: toNum(played),
+      won: toNum(won),
+      drawn: toNum(drawn),
+      lost: toNum(lost),
+      points: toNum(points),
+    });
+  });
+
+  return standings;
+}
+
+/**
+ * Scrapes the league's "form guide" page and returns each team's most recent
+ * results (oldest to newest, capped to the last 5) as single letters: "W",
+ * "D", or "L". Each match cell in that table carries a one-letter class
+ * ("w" / "d" / "l") alongside its other responsive classes, so reading the
+ * class is more robust than parsing the cell's text.
+ */
+export async function scrapeFormGuide(leagueSlug: string): Promise<Map<string, string[]>> {
+  const url = `${BASE}/${leagueSlug}/form-guide`;
+  const html = await fetchHtml(url);
+  const $ = cheerio.load(html);
+
+  const form = new Map<string, string[]>();
+
+  $("table.form-guide tbody tr").each((_, el) => {
+    const row = $(el);
+
+    const teamName = row.find("td.team a").first().text().trim() || row.find("td.team").first().text().trim();
+    if (!teamName) return;
+
+    const results: string[] = [];
+    row.find("td.match").each((__, cell) => {
+      const classes = ($(cell).attr("class") || "").split(/\s+/);
+      if (classes.includes("w")) results.push("W");
+      else if (classes.includes("d")) results.push("D");
+      else if (classes.includes("l")) results.push("L");
+    });
+
+    form.set(teamName, results.slice(-5));
+  });
+
+  return form;
 }

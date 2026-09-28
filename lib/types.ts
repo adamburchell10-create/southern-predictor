@@ -42,3 +42,29 @@ export interface PredictionRow {
   points: number | null;
   updated_at: string;
 }
+
+export interface ScrapedStanding {
+  teamName: string;
+  position: number;
+  played: number | null;
+  won: number | null;
+  drawn: number | null;
+  lost: number | null;
+  points: number | null;
+  /** Last 5 results, oldest to newest, e.g. ["L", "D", "W", "W", "W"]. */
+  form?: string[];
+}
+
+export interface StandingRow {
+  id: string;
+  team_name: string;
+  position: number;
+  played: number | null;
+  won: number | null;
+  drawn: number | null;
+  lost: number | null;
+  points: number | null;
+  /** Comma-separated last-5 results, oldest to newest, e.g. "L,D,W,W,W". */
+  form: string | null;
+  updated_at: string;
+}

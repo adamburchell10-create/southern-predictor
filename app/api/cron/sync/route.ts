@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { scrapeLeague } from "@/lib/scraper";
+import { scrapeLeague, scrapeLeagueTable, scrapeFormGuide } from "@/lib/scraper";
 import { scorePrediction } from "@/lib/scoring";
 
 export const maxDuration = 60;
@@ -87,12 +87,36 @@ async function runSync() {
     }
   }
 
+  const standings = await scrapeLeagueTable(leagueSlug);
+  const formGuide = await scrapeFormGuide(leagueSlug);
+  let standingsUpserted = 0;
+  for (const s of standings) {
+    const form = formGuide.get(s.teamName);
+    const { error } = await db.from("standings").upsert(
+      {
+        team_name: s.teamName,
+        position: s.position,
+        played: s.played,
+        won: s.won,
+        drawn: s.drawn,
+        lost: s.lost,
+        points: s.points,
+        form: form && form.length > 0 ? form.join(",") : null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "team_name" }
+    );
+    if (!error) standingsUpserted += 1;
+  }
+
   return NextResponse.json({
     ok: true,
     matchesScraped: scraped.length,
     matchesUpserted: upserted,
     finishedMatches: finishedMatches?.length ?? 0,
     predictionsScored: scored,
+    standingsScraped: standings.length,
+    standingsUpserted,
     ranAt: new Date().toISOString(),
   });
 }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import WeekPager from "../WeekPager";
 import { defaultMatchweekIndex, groupByMatchweek, isCurrentMatchweek } from "../weekUtils";
+import { ordinal } from "@/lib/format";
 
 interface MatchApi {
   id: string;
@@ -32,6 +33,8 @@ export default function PredictPage() {
   const [savedFlash, setSavedFlash] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [weekIndex, setWeekIndex] = useState<number | null>(null);
+  const [positions, setPositions] = useState<Record<string, number>>({});
+  const [form, setForm] = useState<Record<string, string[]>>({});
 
   async function loadAll() {
     const joinRes = await fetch("/api/join");
@@ -41,14 +44,25 @@ export default function PredictPage() {
       return;
     }
 
-    const [fixturesRes, predsRes] = await Promise.all([
+    const [fixturesRes, predsRes, standingsRes] = await Promise.all([
       fetch("/api/fixtures"),
       fetch("/api/predictions"),
+      fetch("/api/standings"),
     ]);
     const fixturesData = await fixturesRes.json();
     const predsData = await predsRes.json();
+    const standingsData = await standingsRes.json();
 
     setMatches(fixturesData.matches || []);
+
+    const positionMap: Record<string, number> = {};
+    const formMap: Record<string, string[]> = {};
+    for (const s of standingsData.standings || []) {
+      positionMap[s.team_name] = s.position;
+      if (s.form) formMap[s.team_name] = String(s.form).split(",").filter(Boolean);
+    }
+    setPositions(positionMap);
+    setForm(formMap);
 
     const ownMap: Record<string, OwnPred> = {};
     for (const p of predsData.own || []) ownMap[p.match_id] = p;
@@ -67,6 +81,31 @@ export default function PredictPage() {
   useEffect(() => {
     loadAll();
   }, []);
+
+  function teamLabel(name: string) {
+    const pos = positions[name];
+    return pos ? `${name} (${ordinal(pos)})` : name;
+  }
+
+  function FormBadges({ team, align }: { team: string; align: "left" | "right" }) {
+    const results = form[team];
+    if (!results || results.length === 0) return null;
+    return (
+      <div
+        className="form-badges"
+        style={{ justifyContent: align === "right" ? "flex-end" : "flex-start" }}
+      >
+        {results.map((r, i) => (
+          <span
+            key={i}
+            className={`form-badge ${r === "W" ? "form-w" : r === "D" ? "form-d" : "form-l"}`}
+          >
+            {r}
+          </span>
+        ))}
+      </div>
+    );
+  }
 
   const getKickoff = (m: MatchApi) => m.kickoff_at;
   const grouped = useMemo(() => groupByMatchweek(matches, getKickoff), [matches]);
@@ -147,7 +186,10 @@ export default function PredictPage() {
           return (
             <div key={m.id} className="match-row" style={{ flexDirection: "column", alignItems: "stretch" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div className="team">{m.home_team}</div>
+                <div className="team">
+                  <div>{teamLabel(m.home_team)}</div>
+                  <FormBadges team={m.home_team} align="right" />
+                </div>
                 <div className="score-inputs">
                   {finished ? (
                     <>
@@ -173,7 +215,10 @@ export default function PredictPage() {
                     </>
                   )}
                 </div>
-                <div className="team away">{m.away_team}</div>
+                <div className="team away">
+                  <div>{teamLabel(m.away_team)}</div>
+                  <FormBadges team={m.away_team} align="left" />
+                </div>
               </div>
 
               <div className="meta-row">

@@ -25,7 +25,7 @@ dotenv.config({ path: ".env.local" });
 dotenv.config(); // fall back to a plain .env if that's what you used instead
 
 import { supabaseAdmin } from "../lib/supabaseAdmin";
-import { scrapeLeague } from "../lib/scraper";
+import { scrapeLeague, scrapeLeagueTable, scrapeFormGuide } from "../lib/scraper";
 import { scorePrediction } from "../lib/scoring";
 
 async function main() {
@@ -87,6 +87,34 @@ async function main() {
   }
 
   console.log(`Finished matches: ${finishedMatches?.length ?? 0}, predictions (re)scored: ${scored}`);
+
+  const standings = await scrapeLeagueTable(leagueSlug);
+  console.log(`Scraped ${standings.length} standings rows`);
+
+  const formGuide = await scrapeFormGuide(leagueSlug);
+  console.log(`Scraped form guide for ${formGuide.size} teams`);
+
+  let standingsUpserted = 0;
+  for (const s of standings) {
+    const form = formGuide.get(s.teamName);
+    const { error } = await db.from("standings").upsert(
+      {
+        team_name: s.teamName,
+        position: s.position,
+        played: s.played,
+        won: s.won,
+        drawn: s.drawn,
+        lost: s.lost,
+        points: s.points,
+        form: form && form.length > 0 ? form.join(",") : null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "team_name" }
+    );
+    if (!error) standingsUpserted += 1;
+    else console.error("standings upsert error", s.teamName, error.message);
+  }
+  console.log(`Upserted ${standingsUpserted} standings rows`);
 }
 
 main()
