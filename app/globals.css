@@ -331,8 +331,18 @@ input.name-input {
   margin-top: 10px;
 }
 
+.table-scroll {
+  /* Keeps a wide table scrollable *within* the rounded card instead of
+     letting it spill past the card's edge on a narrow phone screen. */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -16px;
+  padding: 0 16px;
+}
+
 table.leaderboard {
   width: 100%;
+  min-width: 480px;
   border-collapse: collapse;
   font-size: 14px;
 }
@@ -342,12 +352,30 @@ table.leaderboard td {
   text-align: left;
   padding: 10px 8px;
   border-bottom: 1px solid var(--border);
+  white-space: nowrap;
 }
 
 table.leaderboard th {
   color: var(--muted);
   font-size: 12px;
   text-transform: uppercase;
+}
+
+@media (max-width: 480px) {
+  .table-scroll {
+    margin: 0 -16px;
+    padding: 0 16px;
+  }
+
+  table.leaderboard {
+    min-width: 420px;
+    font-size: 13px;
+  }
+
+  table.leaderboard th,
+  table.leaderboard td {
+    padding: 8px 5px;
+  }
 }
 
 table.leaderboard tr.me td {

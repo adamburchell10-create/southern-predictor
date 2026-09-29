@@ -42,34 +42,36 @@ export default function LeaderboardPage() {
         correct result only · gameweek bonus for correct results in that round only (5-7 = +1,
         8-9 = +2, 10+ = +3, doesn&rsquo;t carry over between gameweeks)
       </p>
-      <table className="leaderboard">
-        <thead>
-          <tr>
-            <th></th>
-            <th>Player</th>
-            <th>Pts</th>
-            <th>Bonus</th>
-            <th>Exact</th>
-            <th>Close</th>
-            <th>Result</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={r.playerId} className={r.playerId === me ? "me" : ""}>
-              <td className="rank">{i + 1}</td>
-              <td>{r.name}</td>
-              <td>
-                <strong>{r.totalPoints}</strong>
-              </td>
-              <td>{r.bonus > 0 ? `+${r.bonus}` : 0}</td>
-              <td>{r.exact}</td>
-              <td>{r.close}</td>
-              <td>{r.correct}</td>
+      <div className="table-scroll">
+        <table className="leaderboard">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Player</th>
+              <th>Pts</th>
+              <th>Exact</th>
+              <th>Close</th>
+              <th>Result</th>
+              <th>Bonus</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={r.playerId} className={r.playerId === me ? "me" : ""}>
+                <td className="rank">{i + 1}</td>
+                <td>{r.name}</td>
+                <td>
+                  <strong>{r.totalPoints}</strong>
+                </td>
+                <td>{r.exact}</td>
+                <td>{r.close}</td>
+                <td>{r.correct}</td>
+                <td>{r.bonus > 0 ? `+${r.bonus}` : 0}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
