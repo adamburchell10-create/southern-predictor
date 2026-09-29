@@ -74,8 +74,20 @@ export default function FriendsPage() {
         if (!byMatch[p.match_id]) byMatch[p.match_id] = [];
         byMatch[p.match_id].push({ ...p, name: p.player?.name ?? "Unknown", isMe: false });
       }
+      // Group predictions by their predicted result - home win, then draw,
+      // then away win - rather than alphabetically by name.
+      const resultRank = (p: PredEntry): number => {
+        if (p.home_pred > p.away_pred) return 0; // predicted home win
+        if (p.home_pred === p.away_pred) return 1; // predicted draw
+        return 2; // predicted away win
+      };
       for (const key of Object.keys(byMatch)) {
-        byMatch[key].sort((a, b) => (b.points ?? -1) - (a.points ?? -1) || a.name.localeCompare(b.name));
+        byMatch[key].sort(
+          (a, b) =>
+            resultRank(a) - resultRank(b) ||
+            (b.points ?? -1) - (a.points ?? -1) ||
+            a.name.localeCompare(b.name)
+        );
       }
       setPredsByMatch(byMatch);
       setLoading(false);
