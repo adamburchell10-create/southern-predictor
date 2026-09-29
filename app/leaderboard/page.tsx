@@ -40,7 +40,7 @@ export default function LeaderboardPage() {
       <p style={{ color: "#94a3b8", fontSize: 13, marginTop: -6 }}>
         3 pts exact score · 1.5 pts close (same goal difference, or within 1 goal overall) · 1 pt
         correct result only · gameweek bonus for correct results in that round only (5-7 = +1,
-        8-9 = +2, 10+ = +3, doesn&rsquo;t carry over between gameweeks)
+        8-9 = +2, 10+ = +3)
       </p>
       <div className="table-scroll">
         <table className="leaderboard">
