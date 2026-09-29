@@ -85,6 +85,11 @@ export default function FriendsPage() {
         byMatch[key].sort(
           (a, b) =>
             resultRank(a) - resultRank(b) ||
+            // Within a result group, cluster identical scorelines together
+            // (e.g. every 2-1 next to each other) before falling back to
+            // points/name.
+            a.home_pred - b.home_pred ||
+            a.away_pred - b.away_pred ||
             (b.points ?? -1) - (a.points ?? -1) ||
             a.name.localeCompare(b.name)
         );
