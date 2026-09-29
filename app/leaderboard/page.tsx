@@ -6,6 +6,7 @@ interface Row {
   playerId: string;
   name: string;
   totalPoints: number;
+  bonus: number;
   exact: number;
   close: number;
   correct: number;
@@ -38,7 +39,8 @@ export default function LeaderboardPage() {
       <h2 style={{ marginTop: 0 }}>Leaderboard</h2>
       <p style={{ color: "#94a3b8", fontSize: 13, marginTop: -6 }}>
         3 pts exact score · 1.5 pts close (same goal difference, or within 1 goal overall) · 1 pt
-        correct result only
+        correct result only · gameweek bonus for correct results in that round only (5-7 = +1,
+        8-9 = +2, 10+ = +3, doesn&rsquo;t carry over between gameweeks)
       </p>
       <table className="leaderboard">
         <thead>
@@ -46,6 +48,7 @@ export default function LeaderboardPage() {
             <th></th>
             <th>Player</th>
             <th>Pts</th>
+            <th>Bonus</th>
             <th>Exact</th>
             <th>Close</th>
             <th>Result</th>
@@ -59,6 +62,7 @@ export default function LeaderboardPage() {
               <td>
                 <strong>{r.totalPoints}</strong>
               </td>
+              <td>{r.bonus > 0 ? `+${r.bonus}` : 0}</td>
               <td>{r.exact}</td>
               <td>{r.close}</td>
               <td>{r.correct}</td>

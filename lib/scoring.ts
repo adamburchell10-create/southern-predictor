@@ -59,3 +59,24 @@ export function scorePrediction(
 
   return 0;
 }
+
+/**
+ * Gameweek bonus points, on top of normal per-match scoring.
+ *
+ * Based on how many "correct results" (the right team won, or correctly
+ * predicted a draw - i.e. any prediction worth more than 0 points: 1, 1.5,
+ * or 3) a player got within a single gameweek/round. Doesn't roll over
+ * between gameweeks - each round's bonus is worked out purely from that
+ * round's own correct-result count:
+ *
+ *   5-7 correct  -> +1 bonus point
+ *   8-9 correct  -> +2 bonus points
+ *   10+ correct  -> +3 bonus points
+ *   otherwise    -> +0
+ */
+export function bonusForCorrectCount(correctCount: number): number {
+  if (correctCount >= 10) return 3;
+  if (correctCount >= 8) return 2;
+  if (correctCount >= 5) return 1;
+  return 0;
+}
