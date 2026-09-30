@@ -60,6 +60,36 @@ console.log("\n--- weekGrouping.ts: groupIntoRounds ---");
   check("gap of >2 days starts a new round", rounds[2]?.items.length, 1);
 }
 
+console.log("\n--- weekGrouping.ts: groupIntoRounds with isLive (dead-round splitting) ---");
+{
+  // Reproduces the real bug: a dead Saturday practice round (no real
+  // predictions) would otherwise trap a single live Monday fixture in a
+  // "weekend" round by itself, splitting it away from the live Tue/Wed
+  // midweek round it's practically part of and costing a bonus tier.
+  const items = [
+    { id: "sat1", kickoff_at: "2026-09-26T14:00:00.000Z", live: false }, // Sat - dead
+    { id: "sat2", kickoff_at: "2026-09-26T14:00:00.000Z", live: false }, // Sat - dead
+    { id: "mon1", kickoff_at: "2026-09-28T18:45:00.000Z", live: true }, // Mon - live
+    { id: "tue1", kickoff_at: "2026-09-29T14:00:00.000Z", live: true }, // Tue - live
+    { id: "wed1", kickoff_at: "2026-09-30T18:45:00.000Z", live: true }, // Wed - live
+  ];
+  const rounds = groupIntoRounds(
+    items,
+    (i) => i.kickoff_at,
+    (i) => i.live
+  );
+  check("splits into 2 rounds (dead Saturday, live Mon+Tue+Wed)", rounds.length, 2);
+  const deadRound = rounds.find((r) => r.items.every((i) => !i.live));
+  const liveRound = rounds.find((r) => r.items.every((i) => i.live));
+  check("dead round keeps just the 2 Saturday fixtures", deadRound?.items.length, 2);
+  check("live round folds Mon into the following midweek round", liveRound?.items.length, 3);
+  check(
+    "live round contains Mon+Tue+Wed, not a Saturday fixture",
+    liveRound?.items.map((i) => i.id).sort(),
+    ["mon1", "tue1", "wed1"]
+  );
+}
+
 async function testScraper() {
   console.log("\n--- scraper.ts (live network check) ---");
   try {

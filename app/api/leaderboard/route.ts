@@ -38,11 +38,6 @@ export async function GET() {
     return NextResponse.json({ error: predictionsError.message }, { status: 500 });
   }
 
-  // Every match (any status) is needed to work out which gameweeks are
-  // fully decided yet - a gameweek's bonus is only awarded once every
-  // fixture in it is finished or postponed (postponed matches get
-  // rescheduled into a later gameweek entirely, so they shouldn't hold this
-  // one up).
   const { data: matchData, error: matchesError } = await db
     .from("matches")
     .select("id, kickoff_at, status");
@@ -51,8 +46,22 @@ export async function GET() {
     return NextResponse.json({ error: matchesError.message }, { status: 500 });
   }
 
+  // Every prediction regardless of whether it's been scored yet, just to
+  // know which matches (and so which calendar days) have any real
+  // prediction activity at all - see the big comment on groupIntoRounds for
+  // why that matters (a wiped practice round shouldn't be able to trap a
+  // live fixture in a round of the wrong kind).
+  const { data: livePredictionData, error: livePredictionsError } = await db
+    .from("predictions")
+    .select("match_id");
+
+  if (livePredictionsError) {
+    return NextResponse.json({ error: livePredictionsError.message }, { status: 500 });
+  }
+
   const predictions = (predictionData || []) as unknown as PredictionRow[];
   const matches = (matchData || []) as unknown as MatchRow[];
+  const liveMatchIds = new Set((livePredictionData || []).map((r: { match_id: string }) => r.match_id));
 
   const byPlayer = new Map<
     string,
@@ -96,7 +105,11 @@ export async function GET() {
   // once every fixture in that round has been played. Bonus never rolls
   // over between gameweeks, so each round is scored independently and the
   // results summed.
-  const rounds = groupIntoRounds(matches, (m) => m.kickoff_at);
+  const rounds = groupIntoRounds(
+    matches,
+    (m) => m.kickoff_at,
+    (m) => liveMatchIds.has(m.id)
+  );
 
   const predictionsByMatch = new Map<string, PredictionRow[]>();
   for (const row of predictions) {

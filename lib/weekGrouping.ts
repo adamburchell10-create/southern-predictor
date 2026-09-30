@@ -8,6 +8,19 @@
 // process's own timezone (Vercel's serverless functions run in UTC), so
 // the grouping always matches what a UK-based friend sees as one
 // page/round in the app.
+//
+// One wrinkle bonus scoring needs that the UI grouping doesn't: an
+// optional `isLive` predicate marking which matches actually have real
+// predictions on them. Without it, a day with zero real predictions (e.g.
+// an old practice round that got wiped in a leaderboard reset) can "trap"
+// an adjacent live day in a round of the wrong kind - e.g. a single live
+// Monday fixture getting bundled with a long-dead Saturday round instead
+// of the midweek round it's practically part of, splitting a player's
+// correct-result count across two rounds and costing them a bonus tier.
+// When a round ends up mixing dead and live days, the dead days are left
+// in a (harmless, contributes-nothing) round of their own, and the live
+// days are folded into the very next round instead - falling back to the
+// previous round if there is no next one.
 
 const LONDON_TZ = "Europe/London";
 
@@ -49,32 +62,73 @@ export interface Round<T> {
   items: T[];
 }
 
-export function groupIntoRounds<T>(items: T[], getKickoffIso: (item: T) => string): Array<Round<T>> {
-  // 1. Bucket fixtures by UK calendar day.
-  const byDay = new Map<string, { key: string; items: T[] }>();
+interface DayBucket<T> {
+  key: string;
+  items: T[];
+  live: boolean;
+}
+
+interface Group<T> {
+  kind: "weekend" | "midweek";
+  lastDayKey: string;
+  days: DayBucket<T>[];
+}
+
+export function groupIntoRounds<T>(
+  items: T[],
+  getKickoffIso: (item: T) => string,
+  isLive: (item: T) => boolean = () => true
+): Array<Round<T>> {
+  // 1. Bucket fixtures by UK calendar day, noting which days have any
+  // "live" (e.g. actually-predicted) activity.
+  const byDay = new Map<string, DayBucket<T>>();
   for (const item of items) {
     const key = londonDayKey(getKickoffIso(item));
-    if (!byDay.has(key)) byDay.set(key, { key, items: [] });
-    byDay.get(key)!.items.push(item);
+    if (!byDay.has(key)) byDay.set(key, { key, items: [], live: false });
+    const bucket = byDay.get(key)!;
+    bucket.items.push(item);
+    if (isLive(item)) bucket.live = true;
   }
   const days = Array.from(byDay.values()).sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 
   // 2. Merge consecutive days of the same kind (weekend/midweek) into
   // rounds, splitting whenever the kind changes or there's a gap of more
   // than 2 days since the previous fixture day.
-  const groups: Array<{ key: string; items: T[]; kind: "weekend" | "midweek"; lastDayKey: string }> = [];
+  const groups: Group<T>[] = [];
   for (const day of days) {
     const kind: "weekend" | "midweek" = londonIsWeekend(getKickoffIso(day.items[0])) ? "weekend" : "midweek";
     const last = groups[groups.length - 1];
     const canMerge = last !== undefined && last.kind === kind && daysBetweenDayKeys(last.lastDayKey, day.key) <= 2;
 
     if (canMerge && last) {
-      last.items.push(...day.items);
+      last.days.push(day);
       last.lastDayKey = day.key;
     } else {
-      groups.push({ key: day.key, items: [...day.items], kind, lastDayKey: day.key });
+      groups.push({ kind, lastDayKey: day.key, days: [day] });
     }
   }
 
-  return groups.map((g) => ({ key: g.key, items: g.items }));
+  // 3. Split dead days out of any round that mixes dead and live days,
+  // and fold the live days into the next round (or the previous one, if
+  // this is the last round).
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i];
+    const liveDays = g.days.filter((d) => d.live);
+    const deadDays = g.days.filter((d) => !d.live);
+    if (liveDays.length === 0 || deadDays.length === 0) continue; // nothing mixed here
+
+    g.days = deadDays;
+    const forward = groups[i + 1];
+    const backward = groups[i - 1];
+    if (forward) forward.days.push(...liveDays);
+    else if (backward) backward.days.push(...liveDays);
+    else groups.push({ kind: g.kind, lastDayKey: g.lastDayKey, days: liveDays });
+  }
+
+  return groups
+    .filter((g) => g.days.length > 0)
+    .map((g) => {
+      const sortedDays = [...g.days].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+      return { key: sortedDays[0].key, items: sortedDays.flatMap((d) => d.items) };
+    });
 }
