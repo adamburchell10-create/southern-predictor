@@ -1,12 +1,13 @@
 // Server-safe rewrite of app/weekUtils.ts's groupByMatchweek(), used to
 // figure out which matches belong to the same "gameweek" for bonus-points
 // purposes (see app/api/leaderboard/route.ts). Same clustering rule as the
-// Predict/Friends UI - weekend fixtures (Sat/Sun) cluster together, midweek
-// fixtures (Mon-Fri) cluster together, splitting whenever the kind changes
-// or there's a gap of more than 2 days - but computed from each kickoff's
-// Europe/London calendar day instead of the server process's own timezone
-// (Vercel's serverless functions run in UTC), so the grouping always
-// matches what a UK-based friend sees as one page/round in the app.
+// Predict/Friends UI - weekend fixtures (Fri/Sat/Sun/Mon) cluster together,
+// midweek fixtures (Tue/Wed/Thu) cluster together, splitting whenever the
+// kind changes or there's a gap of more than 2 days - but computed from
+// each kickoff's Europe/London calendar day instead of the server
+// process's own timezone (Vercel's serverless functions run in UTC), so
+// the grouping always matches what a UK-based friend sees as one
+// page/round in the app.
 
 const LONDON_TZ = "Europe/London";
 
@@ -30,7 +31,8 @@ function londonDayKey(iso: string): string {
 
 function londonIsWeekend(iso: string): boolean {
   const wd = weekdayFormatter.format(new Date(iso));
-  return wd === "Sat" || wd === "Sun";
+  // Fri, Sat, Sun, Mon all count as "weekend" fixtures.
+  return wd === "Fri" || wd === "Sat" || wd === "Sun" || wd === "Mon";
 }
 
 function daysBetweenDayKeys(a: string, b: string): number {

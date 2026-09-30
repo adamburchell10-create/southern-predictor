@@ -5,9 +5,11 @@
 // A matchweek here isn't a Monday-Sunday calendar week - it's a cluster of
 // fixture dates of the same kind (weekend, or midweek) that are close
 // together. That's what actually splits a season into rounds for a league
-// like this: a Tue/Wed midweek round is its own page, a Sat/Sun weekend
-// round is its own page, even when they happen to fall in the same
-// calendar week.
+// like this: a Tue/Wed midweek round is its own page, a Fri/Sat/Sun/Mon
+// weekend round is its own page, even when they happen to fall in the same
+// calendar week. Friday and Monday fixtures count as "weekend" (clubs at
+// this level often play a weekend round's games across Fri-Mon), leaving
+// Tue/Wed/Thu as the only "midweek" days.
 
 export type MatchweekKind = "weekend" | "midweek";
 
@@ -26,7 +28,8 @@ function dayKey(d: Date): string {
 
 function isWeekendDay(d: Date): boolean {
   const day = d.getDay();
-  return day === 0 || day === 6;
+  // Fri (5), Sat (6), Sun (0), Mon (1) all count as "weekend" fixtures.
+  return day === 0 || day === 5 || day === 6 || day === 1;
 }
 
 function daysBetween(a: Date, b: Date): number {
