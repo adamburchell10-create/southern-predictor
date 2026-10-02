@@ -59,6 +59,7 @@ function daysBetweenDayKeys(a: string, b: string): number {
 
 export interface Round<T> {
   key: string; // UK calendar day (YYYY-MM-DD) of the round's earliest fixture
+  kind: "weekend" | "midweek";
   items: T[];
 }
 
@@ -129,6 +130,6 @@ export function groupIntoRounds<T>(
     .filter((g) => g.days.length > 0)
     .map((g) => {
       const sortedDays = [...g.days].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-      return { key: sortedDays[0].key, items: sortedDays.flatMap((d) => d.items) };
+      return { key: sortedDays[0].key, kind: g.kind, items: sortedDays.flatMap((d) => d.items) };
     });
 }

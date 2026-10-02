@@ -1,5 +1,6 @@
 import { scorePrediction, bonusForCorrectCount } from "../lib/scoring";
 import { groupIntoRounds } from "../lib/weekGrouping";
+import { computeGameweeks } from "../lib/gameweeks";
 import { scrapeMonth } from "../lib/scraper";
 
 let failures = 0;
@@ -88,6 +89,48 @@ console.log("\n--- weekGrouping.ts: groupIntoRounds with isLive (dead-round spli
     liveRound?.items.map((i) => i.id).sort(),
     ["mon1", "tue1", "wed1"]
   );
+}
+
+console.log("\n--- gameweeks.ts: computeGameweeks ---");
+{
+  // Two rounds: a weekend round (Sat+Sun) and a midweek round (Wed), each
+  // with its own finished matches and predictions, so per-round standings
+  // (and bonus) should be scoped to that round only - not accumulated
+  // across rounds.
+  const players = [
+    { id: "p1", name: "Alice" },
+    { id: "p2", name: "Bob" },
+  ];
+  const matches = [
+    { id: "m1", kickoff_at: "2026-09-26T14:00:00.000Z", status: "finished" as const }, // Sat
+    { id: "m2", kickoff_at: "2026-09-27T14:00:00.000Z", status: "finished" as const }, // Sun
+    { id: "m3", kickoff_at: "2026-09-30T18:45:00.000Z", status: "finished" as const }, // Wed
+  ];
+  const predictions = [
+    { player_id: "p1", match_id: "m1", points: 3 },
+    { player_id: "p1", match_id: "m2", points: 1 },
+    { player_id: "p2", match_id: "m1", points: 1.5 },
+    { player_id: "p1", match_id: "m3", points: 3 },
+  ];
+  const liveMatchIds = new Set(["m1", "m2", "m3"]);
+  const gameweeks = computeGameweeks(matches, predictions, liveMatchIds, players);
+
+  check("splits into 2 gameweeks (weekend, midweek)", gameweeks.length, 2);
+  const weekend = gameweeks.find((g) => g.kind === "weekend");
+  const midweek = gameweeks.find((g) => g.kind === "midweek");
+
+  const alice = weekend?.standings.find((s) => s.playerId === "p1");
+  check("Alice's weekend total is just this round's points (3 + 1), no bonus yet", alice?.total, 4);
+  check("Alice's weekend exact count", alice?.exact, 1);
+  check("Alice's weekend result count", alice?.result, 1);
+
+  const bob = weekend?.standings.find((s) => s.playerId === "p2");
+  check("Bob is seeded with zeros even with just 1 prediction this round", bob?.total, 1.5);
+
+  const aliceMidweek = midweek?.standings.find((s) => s.playerId === "p1");
+  check("Alice's midweek total doesn't include her weekend points", aliceMidweek?.total, 3);
+  const bobMidweek = midweek?.standings.find((s) => s.playerId === "p2");
+  check("Bob is still seeded with zeros in a round he didn't predict", bobMidweek?.total, 0);
 }
 
 async function testScraper() {

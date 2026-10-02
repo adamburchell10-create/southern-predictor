@@ -20,6 +20,9 @@ export default function NavBar() {
         <Link href="/friends" className={isActive("/friends")}>
           Friends
         </Link>
+        <Link href="/weekly" className={isActive("/weekly")}>
+          Weekly
+        </Link>
         <Link href="/leaderboard" className={isActive("/leaderboard")}>
           Leaderboard
         </Link>

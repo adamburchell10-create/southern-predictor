@@ -1,22 +1,8 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { bonusForCorrectCount } from "@/lib/scoring";
-import { groupIntoRounds } from "@/lib/weekGrouping";
+import { computeGameweeks, type GameweekMatch, type GameweekPrediction, type PlayerRow } from "@/lib/gameweeks";
 
 export const dynamic = "force-dynamic";
-
-interface PredictionRow {
-  player_id: string;
-  match_id: string;
-  points: number | null;
-  player: { name: string } | null;
-}
-
-interface MatchRow {
-  id: string;
-  kickoff_at: string;
-  status: "scheduled" | "postponed" | "finished";
-}
 
 export async function GET() {
   const db = supabaseAdmin();
@@ -31,7 +17,7 @@ export async function GET() {
   // there's nothing to "close out" for a matchweek, it just accrues.
   const { data: predictionData, error: predictionsError } = await db
     .from("predictions")
-    .select("player_id, match_id, points, player:players(name)")
+    .select("player_id, match_id, points")
     .not("points", "is", null);
 
   if (predictionsError) {
@@ -59,11 +45,17 @@ export async function GET() {
     return NextResponse.json({ error: livePredictionsError.message }, { status: 500 });
   }
 
-  const predictions = (predictionData || []) as unknown as PredictionRow[];
-  const matches = (matchData || []) as unknown as MatchRow[];
+  const matches = (matchData || []) as unknown as GameweekMatch[];
+  const predictions = (predictionData || []) as unknown as GameweekPrediction[];
+  const playerRows = (players || []) as unknown as PlayerRow[];
   const liveMatchIds = new Set((livePredictionData || []).map((r: { match_id: string }) => r.match_id));
 
-  const byPlayer = new Map<
+  // The overall leaderboard is just every gameweek's standings (computed the
+  // same way, and from the same round boundaries, as the per-round Weekly
+  // tab) summed up into a season-long tally - see lib/gameweeks.ts.
+  const gameweeks = computeGameweeks(matches, predictions, liveMatchIds, playerRows);
+
+  const totals = new Map<
     string,
     {
       name: string;
@@ -76,72 +68,24 @@ export async function GET() {
     }
   >();
 
-  for (const p of players || []) {
-    byPlayer.set(p.id, { name: p.name, totalPoints: 0, bonus: 0, exact: 0, close: 0, correct: 0, played: 0 });
+  for (const p of playerRows) {
+    totals.set(p.id, { name: p.name, totalPoints: 0, bonus: 0, exact: 0, close: 0, correct: 0, played: 0 });
   }
 
-  for (const row of predictions) {
-    const key = row.player_id;
-    const name = row.player?.name ?? "Unknown";
-    const entry =
-      byPlayer.get(key) ?? { name, totalPoints: 0, bonus: 0, exact: 0, close: 0, correct: 0, played: 0 };
-    const points = row.points ?? 0;
-    entry.totalPoints += points;
-    entry.played += 1;
-    if (points === 3) entry.exact += 1;
-    else if (points === 1.5) entry.close += 1;
-    else if (points === 1) entry.correct += 1;
-    byPlayer.set(key, entry);
-  }
-
-  // Gameweek bonus: group every match into the same weekend/midweek rounds
-  // the Predict/Friends tabs page through, then - for each round - count
-  // each player's correct-result predictions (points > 0) among that
-  // round's *finished* matches only, and award the matching bonus. This is
-  // naturally "live": a round's correct-count only ever goes up as more of
-  // its fixtures finish (a finished result never gets un-counted), so there
-  // is no need to wait for the whole round to be decided before the bonus
-  // starts accruing - it just keeps climbing through the week and settles
-  // once every fixture in that round has been played. Bonus never rolls
-  // over between gameweeks, so each round is scored independently and the
-  // results summed.
-  const rounds = groupIntoRounds(
-    matches,
-    (m) => m.kickoff_at,
-    (m) => liveMatchIds.has(m.id)
-  );
-
-  const predictionsByMatch = new Map<string, PredictionRow[]>();
-  for (const row of predictions) {
-    const list = predictionsByMatch.get(row.match_id) ?? [];
-    list.push(row);
-    predictionsByMatch.set(row.match_id, list);
-  }
-
-  for (const round of rounds) {
-    const finishedMatchIds = new Set(round.items.filter((m) => m.status === "finished").map((m) => m.id));
-    if (finishedMatchIds.size === 0) continue;
-
-    const correctCountByPlayer = new Map<string, number>();
-    for (const matchId of finishedMatchIds) {
-      for (const row of predictionsByMatch.get(matchId) ?? []) {
-        if ((row.points ?? 0) > 0) {
-          correctCountByPlayer.set(row.player_id, (correctCountByPlayer.get(row.player_id) ?? 0) + 1);
-        }
-      }
-    }
-
-    for (const [playerId, correctCount] of correctCountByPlayer) {
-      const bonus = bonusForCorrectCount(correctCount);
-      if (bonus === 0) continue;
-      const entry = byPlayer.get(playerId);
+  for (const gw of gameweeks) {
+    for (const s of gw.standings) {
+      const entry = totals.get(s.playerId);
       if (!entry) continue;
-      entry.bonus += bonus;
-      entry.totalPoints += bonus;
+      entry.totalPoints += s.total;
+      entry.bonus += s.bonus;
+      entry.exact += s.exact;
+      entry.close += s.close;
+      entry.correct += s.result;
+      entry.played += s.played;
     }
   }
 
-  const leaderboard = Array.from(byPlayer.entries())
+  const leaderboard = Array.from(totals.entries())
     .map(([playerId, v]) => ({ playerId, ...v }))
     .sort((a, b) => b.totalPoints - a.totalPoints || b.exact - a.exact || b.close - a.close);
 
