@@ -68,16 +68,17 @@ console.log("\n--- weekGrouping.ts: groupIntoRounds with isLive (dead-round spli
   // "weekend" round by itself, splitting it away from the live Tue/Wed
   // midweek round it's practically part of and costing a bonus tier.
   const items = [
-    { id: "sat1", kickoff_at: "2026-09-26T14:00:00.000Z", live: false }, // Sat - dead
-    { id: "sat2", kickoff_at: "2026-09-26T14:00:00.000Z", live: false }, // Sat - dead
-    { id: "mon1", kickoff_at: "2026-09-28T18:45:00.000Z", live: true }, // Mon - live
-    { id: "tue1", kickoff_at: "2026-09-29T14:00:00.000Z", live: true }, // Tue - live
-    { id: "wed1", kickoff_at: "2026-09-30T18:45:00.000Z", live: true }, // Wed - live
+    { id: "sat1", kickoff_at: "2026-09-26T14:00:00.000Z", live: false, finished: true }, // Sat - dead, already played
+    { id: "sat2", kickoff_at: "2026-09-26T14:00:00.000Z", live: false, finished: true }, // Sat - dead, already played
+    { id: "mon1", kickoff_at: "2026-09-28T18:45:00.000Z", live: true, finished: true }, // Mon - live, already played
+    { id: "tue1", kickoff_at: "2026-09-29T14:00:00.000Z", live: true, finished: true }, // Tue - live, already played
+    { id: "wed1", kickoff_at: "2026-09-30T18:45:00.000Z", live: true, finished: true }, // Wed - live, already played
   ];
   const rounds = groupIntoRounds(
     items,
     (i) => i.kickoff_at,
-    (i) => i.live
+    (i) => i.live,
+    (i) => i.finished
   );
   check("splits into 2 rounds (dead Saturday, live Mon+Tue+Wed)", rounds.length, 2);
   const deadRound = rounds.find((r) => r.items.every((i) => !i.live));
@@ -103,20 +104,23 @@ console.log("\n--- weekGrouping.ts: groupIntoRounds - a single mixed round doesn
   // subsequent dead round all the way to the end of the fixture list and
   // merging a whole season into one bogus round. The fix: decide what's
   // mixed from each round's original makeup, not from what it picks up
-  // along the way, so a relocation only ever happens once, one hop.
+  // along the way, so a relocation only ever happens once, one hop. All of
+  // these matches have already been played - that's what makes the mixed
+  // weekend round (sat1 dead, mon1 live) eligible for splitting at all.
   const items = [
-    { id: "sat1", kickoff_at: "2026-09-26T14:00:00.000Z", live: false }, // Sat - dead
-    { id: "mon1", kickoff_at: "2026-09-28T18:45:00.000Z", live: true }, // Mon - live (same weekend round as sat1)
-    { id: "tue1", kickoff_at: "2026-09-29T14:00:00.000Z", live: false }, // Tue - dead midweek round
-    { id: "wed1", kickoff_at: "2026-09-30T18:45:00.000Z", live: false }, // Wed - dead, same midweek round
-    { id: "sat2", kickoff_at: "2026-10-10T14:00:00.000Z", live: false }, // Sat, >2 days later - new dead round
-    { id: "sat3", kickoff_at: "2026-10-24T14:00:00.000Z", live: false }, // Sat, >2 days later still - new dead round
-    { id: "sat4", kickoff_at: "2026-11-07T14:00:00.000Z", live: false }, // Sat, >2 days later again - new dead round
+    { id: "sat1", kickoff_at: "2026-09-26T14:00:00.000Z", live: false, finished: true }, // Sat - dead
+    { id: "mon1", kickoff_at: "2026-09-28T18:45:00.000Z", live: true, finished: true }, // Mon - live (same weekend round as sat1)
+    { id: "tue1", kickoff_at: "2026-09-29T14:00:00.000Z", live: false, finished: true }, // Tue - dead midweek round
+    { id: "wed1", kickoff_at: "2026-09-30T18:45:00.000Z", live: false, finished: true }, // Wed - dead, same midweek round
+    { id: "sat2", kickoff_at: "2026-10-10T14:00:00.000Z", live: false, finished: false }, // Sat, >2 days later - unplayed
+    { id: "sat3", kickoff_at: "2026-10-24T14:00:00.000Z", live: false, finished: false }, // Sat, >2 days later still - unplayed
+    { id: "sat4", kickoff_at: "2026-11-07T14:00:00.000Z", live: false, finished: false }, // Sat, >2 days later again - unplayed
   ];
   const rounds = groupIntoRounds(
     items,
     (i) => i.kickoff_at,
-    (i) => i.live
+    (i) => i.live,
+    (i) => i.finished
   );
   check("5 distinct rounds, not one giant merged blob", rounds.length, 5);
   check(
@@ -133,6 +137,40 @@ console.log("\n--- weekGrouping.ts: groupIntoRounds - a single mixed round doesn
   check("the far-future rounds stay standalone and untouched", rounds[2]?.items[0]?.id, "sat2");
   check("the far-future rounds stay standalone and untouched (middle)", rounds[3]?.items[0]?.id, "sat3");
   check("the far-future rounds stay standalone and untouched (last)", rounds[4]?.items[0]?.id, "sat4");
+}
+
+console.log("\n--- weekGrouping.ts: groupIntoRounds - an unplayed round isn't split just for partial predictions ---");
+{
+  // Reproduces a second bug found right after shipping the Weekly tab:
+  // Tue 6 Oct and Wed 7 Oct are a perfectly normal midweek round that
+  // simply hasn't been fully predicted yet (totally expected - most
+  // people predict close to kickoff, not the moment fixtures appear).
+  // Because Wed had a prediction in already and Tue didn't, the dead/live
+  // split treated the round as "mixed" and relocated Wednesday into the
+  // following weekend round, which is wrong - nothing has been played
+  // yet, so there's no bonus-scoring reason to split it at all.
+  const items = [
+    { id: "tue1", kickoff_at: "2026-10-06T14:00:00.000Z", live: false, finished: false }, // Tue - not predicted yet
+    { id: "wed1", kickoff_at: "2026-10-07T18:45:00.000Z", live: true, finished: false }, // Wed - already predicted, not played
+    { id: "sat1", kickoff_at: "2026-10-10T14:00:00.000Z", live: false, finished: false }, // following weekend round
+  ];
+  const rounds = groupIntoRounds(
+    items,
+    (i) => i.kickoff_at,
+    (i) => i.live,
+    (i) => i.finished
+  );
+  check("Tue+Wed stay together as one unplayed midweek round", rounds.length, 2);
+  const midweekRound = rounds.find((r) => r.kind === "midweek");
+  check(
+    "the midweek round is Tue+Wed, not split apart",
+    midweekRound?.items.map((i) => i.id).sort(),
+    ["tue1", "wed1"]
+  );
+  const weekendRound = rounds.find((r) => r.kind === "weekend");
+  check("the weekend round is untouched, just its own Saturday fixture", weekendRound?.items.map((i) => i.id), [
+    "sat1",
+  ]);
 }
 
 console.log("\n--- gameweeks.ts: computeGameweeks ---");

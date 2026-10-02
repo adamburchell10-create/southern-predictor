@@ -101,7 +101,8 @@ export function computeGameweeks(
   const rounds = groupIntoRounds(
     matches,
     (m) => m.kickoff_at,
-    (m) => liveMatchIds.has(m.id)
+    (m) => liveMatchIds.has(m.id),
+    (m) => m.status === "finished"
   );
 
   const predictionsByMatch = new Map<string, GameweekPrediction[]>();

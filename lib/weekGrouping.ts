@@ -21,6 +21,20 @@
 // in a (harmless, contributes-nothing) round of their own, and the live
 // days are folded into the very next round instead - falling back to the
 // previous round if there is no next one.
+//
+// That split should only ever kick in for a round that's already been
+// played, though - it exists purely to protect bonus scoring for a round
+// whose grouping is otherwise settled, from stale "dead" artifacts (wiped
+// practice data, old resets). An upcoming round that simply hasn't had all
+// of its matches predicted yet (totally normal - people predict close to
+// kickoff, not the moment fixtures are known) is not "mixed" in that
+// sense, and splitting it apart would be wrong: e.g. a Tue+Wed midweek
+// round where only the Wednesday match has a prediction in so far would
+// otherwise get prised apart, with Wednesday relocated into a following
+// weekend round it has nothing to do with, purely because Tuesday hadn't
+// been predicted on yet. The optional `isFinished` predicate marks which
+// matches have actually been played; a round is only eligible for the
+// dead/live split if at least one of its matches has.
 
 const LONDON_TZ = "Europe/London";
 
@@ -67,6 +81,7 @@ interface DayBucket<T> {
   key: string;
   items: T[];
   live: boolean;
+  finished: boolean;
 }
 
 interface Group<T> {
@@ -78,17 +93,20 @@ interface Group<T> {
 export function groupIntoRounds<T>(
   items: T[],
   getKickoffIso: (item: T) => string,
-  isLive: (item: T) => boolean = () => true
+  isLive: (item: T) => boolean = () => true,
+  isFinished: (item: T) => boolean = () => false
 ): Array<Round<T>> {
   // 1. Bucket fixtures by UK calendar day, noting which days have any
-  // "live" (e.g. actually-predicted) activity.
+  // "live" (e.g. actually-predicted) activity, and which have actually
+  // been played.
   const byDay = new Map<string, DayBucket<T>>();
   for (const item of items) {
     const key = londonDayKey(getKickoffIso(item));
-    if (!byDay.has(key)) byDay.set(key, { key, items: [], live: false });
+    if (!byDay.has(key)) byDay.set(key, { key, items: [], live: false, finished: false });
     const bucket = byDay.get(key)!;
     bucket.items.push(item);
     if (isLive(item)) bucket.live = true;
+    if (isFinished(item)) bucket.finished = true;
   }
   const days = Array.from(byDay.values()).sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 
@@ -123,13 +141,16 @@ export function groupIntoRounds<T>(
   // the season. Snapshotting first means a round's relocation is decided
   // once, from how it actually looked before any relocation happened, so
   // it can never be re-triggered by a hand-me-down from its neighbour.
-  const ownDead = groups.map((g) => g.days.filter((d) => !d.live));
-  const ownLive = groups.map((g) => g.days.filter((d) => d.live));
+  const hasFinished = groups.map((g) => g.days.some((d) => d.finished));
+  const ownDead = groups.map((g, i) => (hasFinished[i] ? g.days.filter((d) => !d.live) : []));
+  const ownLive = groups.map((g, i) => (hasFinished[i] ? g.days.filter((d) => d.live) : []));
 
-  const finalDays: DayBucket<T>[][] = ownDead.map((d) => [...d]);
+  const finalDays: DayBucket<T>[][] = groups.map((g, i) => (hasFinished[i] ? [...ownDead[i]] : [...g.days]));
   const extraGroups: Group<T>[] = [];
 
   for (let i = 0; i < groups.length; i++) {
+    if (!hasFinished[i]) continue; // nothing played yet in this round - no bonus to protect, leave its natural grouping alone
+
     if (ownDead[i].length === 0 || ownLive[i].length === 0) {
       // Not mixed - a purely-live round's days weren't seeded above, so
       // add them back; a purely-dead round needs no change.
