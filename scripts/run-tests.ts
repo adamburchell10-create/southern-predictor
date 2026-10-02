@@ -91,6 +91,50 @@ console.log("\n--- weekGrouping.ts: groupIntoRounds with isLive (dead-round spli
   );
 }
 
+console.log("\n--- weekGrouping.ts: groupIntoRounds - a single mixed round doesn't cascade ---");
+{
+  // Reproduces a bug found while building the Weekly tab: a single live
+  // day (e.g. someone predicting one far-future fixture early) stuck in
+  // an otherwise-dead round used to get folded into the next round, which
+  // - if that next round was itself entirely dead, as most future rounds
+  // are months before anyone's predicted them - would then look "mixed"
+  // too (dead days of its own + the just-folded-in live day) and get
+  // folded again, and again, snowballing the same live day through every
+  // subsequent dead round all the way to the end of the fixture list and
+  // merging a whole season into one bogus round. The fix: decide what's
+  // mixed from each round's original makeup, not from what it picks up
+  // along the way, so a relocation only ever happens once, one hop.
+  const items = [
+    { id: "sat1", kickoff_at: "2026-09-26T14:00:00.000Z", live: false }, // Sat - dead
+    { id: "mon1", kickoff_at: "2026-09-28T18:45:00.000Z", live: true }, // Mon - live (same weekend round as sat1)
+    { id: "tue1", kickoff_at: "2026-09-29T14:00:00.000Z", live: false }, // Tue - dead midweek round
+    { id: "wed1", kickoff_at: "2026-09-30T18:45:00.000Z", live: false }, // Wed - dead, same midweek round
+    { id: "sat2", kickoff_at: "2026-10-10T14:00:00.000Z", live: false }, // Sat, >2 days later - new dead round
+    { id: "sat3", kickoff_at: "2026-10-24T14:00:00.000Z", live: false }, // Sat, >2 days later still - new dead round
+    { id: "sat4", kickoff_at: "2026-11-07T14:00:00.000Z", live: false }, // Sat, >2 days later again - new dead round
+  ];
+  const rounds = groupIntoRounds(
+    items,
+    (i) => i.kickoff_at,
+    (i) => i.live
+  );
+  check("5 distinct rounds, not one giant merged blob", rounds.length, 5);
+  check(
+    "fixture counts per round stay small and distinct (no cascade)",
+    rounds.map((r) => r.items.length),
+    [1, 3, 1, 1, 1]
+  );
+  const liveRound = rounds.find((r) => r.items.some((i) => i.live));
+  check(
+    "the live Monday fixture lands in the following midweek round with Tue+Wed, nothing else",
+    liveRound?.items.map((i) => i.id).sort(),
+    ["mon1", "tue1", "wed1"]
+  );
+  check("the far-future rounds stay standalone and untouched", rounds[2]?.items[0]?.id, "sat2");
+  check("the far-future rounds stay standalone and untouched (middle)", rounds[3]?.items[0]?.id, "sat3");
+  check("the far-future rounds stay standalone and untouched (last)", rounds[4]?.items[0]?.id, "sat4");
+}
+
 console.log("\n--- gameweeks.ts: computeGameweeks ---");
 {
   // Two rounds: a weekend round (Sat+Sun) and a midweek round (Wed), each

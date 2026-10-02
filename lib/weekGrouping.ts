@@ -109,24 +109,45 @@ export function groupIntoRounds<T>(
     }
   }
 
-  // 3. Split dead days out of any round that mixes dead and live days,
-  // and fold the live days into the next round (or the previous one, if
-  // this is the last round).
-  for (let i = 0; i < groups.length; i++) {
-    const g = groups[i];
-    const liveDays = g.days.filter((d) => d.live);
-    const deadDays = g.days.filter((d) => !d.live);
-    if (liveDays.length === 0 || deadDays.length === 0) continue; // nothing mixed here
+  // 3. Split dead days out of any round that mixes dead and live days, and
+  // fold the live days into the next round (or the previous one, if this
+  // is the last round) - in a single hop, based on each round's ORIGINAL
+  // composition (snapshotted below) rather than by mutating `groups` in
+  // place as we go. That distinction matters once there's a long run of
+  // entirely-dead future rounds (e.g. a whole season's worth of unplayed
+  // fixtures with no predictions yet): mutating in place let a single
+  // relocated live day get re-detected as "mixed" in the round it just
+  // landed in and get kicked forward again on the very next loop
+  // iteration, cascading the same live day through every subsequent dead
+  // round until it finally lodged in some unrelated round near the end of
+  // the season. Snapshotting first means a round's relocation is decided
+  // once, from how it actually looked before any relocation happened, so
+  // it can never be re-triggered by a hand-me-down from its neighbour.
+  const ownDead = groups.map((g) => g.days.filter((d) => !d.live));
+  const ownLive = groups.map((g) => g.days.filter((d) => d.live));
 
-    g.days = deadDays;
-    const forward = groups[i + 1];
-    const backward = groups[i - 1];
-    if (forward) forward.days.push(...liveDays);
-    else if (backward) backward.days.push(...liveDays);
-    else groups.push({ kind: g.kind, lastDayKey: g.lastDayKey, days: liveDays });
+  const finalDays: DayBucket<T>[][] = ownDead.map((d) => [...d]);
+  const extraGroups: Group<T>[] = [];
+
+  for (let i = 0; i < groups.length; i++) {
+    if (ownDead[i].length === 0 || ownLive[i].length === 0) {
+      // Not mixed - a purely-live round's days weren't seeded above, so
+      // add them back; a purely-dead round needs no change.
+      if (ownDead[i].length === 0) finalDays[i].push(...ownLive[i]);
+      continue;
+    }
+    // Mixed: this round's live days move out, one hop, to the next round
+    // (or the previous one, or a new standalone round of their own).
+    if (i + 1 < groups.length) finalDays[i + 1].push(...ownLive[i]);
+    else if (i - 1 >= 0) finalDays[i - 1].push(...ownLive[i]);
+    else extraGroups.push({ kind: groups[i].kind, lastDayKey: groups[i].lastDayKey, days: ownLive[i] });
   }
 
-  return groups
+  const finalGroups = groups
+    .map((g, i) => ({ kind: g.kind, lastDayKey: g.lastDayKey, days: finalDays[i] }))
+    .concat(extraGroups);
+
+  return finalGroups
     .filter((g) => g.days.length > 0)
     .map((g) => {
       const sortedDays = [...g.days].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
