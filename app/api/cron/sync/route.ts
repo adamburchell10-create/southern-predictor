@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { scrapeLeague, scrapeLeagueTable, scrapeFormGuide } from "@/lib/scraper";
 import { scorePrediction } from "@/lib/scoring";
+import { SCORE_OVERRIDES } from "@/lib/scoreOverrides";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -67,17 +68,16 @@ async function runSync() {
     for (const match of finishedMatches) {
       const { data: preds, error: predsError } = await db
         .from("predictions")
-        .select("id, home_pred, away_pred")
+        .select("id, player_id, home_pred, away_pred")
         .eq("match_id", match.id);
       if (predsError || !preds) continue;
 
       for (const pred of preds) {
-        const points = scorePrediction(
-          pred.home_pred,
-          pred.away_pred,
-          match.home_score as number,
-          match.away_score as number
-        );
+        const overrideKey = `${pred.player_id}:${match.id}`;
+        const points =
+          overrideKey in SCORE_OVERRIDES
+            ? SCORE_OVERRIDES[overrideKey]
+            : scorePrediction(pred.home_pred, pred.away_pred, match.home_score as number, match.away_score as number);
         const { error: updateError } = await db
           .from("predictions")
           .update({ points })

@@ -1,6 +1,7 @@
 import { scorePrediction, bonusForCorrectCount } from "../lib/scoring";
 import { groupIntoRounds } from "../lib/weekGrouping";
 import { computeGameweeks } from "../lib/gameweeks";
+import { SCORE_OVERRIDES } from "../lib/scoreOverrides";
 import { scrapeMonth } from "../lib/scraper";
 
 let failures = 0;
@@ -59,6 +60,22 @@ console.log("\n--- weekGrouping.ts: groupIntoRounds ---");
   check("weekend round merges Fri+Sat+Sun+Mon into 4 fixtures", rounds[0]?.items.length, 4);
   check("Wed stays its own midweek round (different kind from Mon)", rounds[1]?.items.length, 1);
   check("gap of >2 days starts a new round", rounds[2]?.items.length, 1);
+}
+
+console.log("\n--- scoreOverrides.ts ---");
+{
+  // Sanity-checks the lookup pattern both sync.ts/cron route use - a
+  // typo'd key here would silently mean the override never applies.
+  const overrideLookup = (playerId: string, matchId: string): number | null => {
+    const key = `${playerId}:${matchId}`;
+    return key in SCORE_OVERRIDES ? SCORE_OVERRIDES[key] : null;
+  };
+  check(
+    "Austin's Marlow/Royston override is 1, not the formula's 1.5",
+    overrideLookup("eb1e5ce6-dd76-4a16-84b8-77ffd1f5ed7c", "27cd5312-f8c0-4680-b50c-96897175c487"),
+    1
+  );
+  check("an unrelated player/match has no override", overrideLookup("someone-else", "some-other-match"), null);
 }
 
 console.log("\n--- weekGrouping.ts: groupIntoRounds with isLive (dead-round splitting) ---");
