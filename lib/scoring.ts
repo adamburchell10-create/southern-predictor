@@ -33,9 +33,11 @@ export function scorePrediction(
     return 3;
   }
 
-  const predDiff = predHome - predAway;
+    const predDiff = predHome - predAway;
   const actualDiff = actualHome - actualAway;
   const sameMargin = predDiff === actualDiff; // implies the same result too
+  const marginShift = Math.abs(predHome - actualHome); // same magnitude for both teams when sameMargin holds
+  const closeSameMargin = sameMargin && marginShift <= 1;
 
   const resultOf = (diff: number): "home" | "away" | "draw" =>
     diff > 0 ? "home" : diff < 0 ? "away" : "draw";
@@ -49,7 +51,7 @@ export function scorePrediction(
   const totalDistance = Math.abs(predHome - actualHome) + Math.abs(predAway - actualAway);
   const oneGoalOff = totalDistance === 1 && correctResult;
 
-  if (sameMargin || oneGoalOff) {
+  if (closeSameMargin || oneGoalOff) {
     return 1.5;
   }
 
