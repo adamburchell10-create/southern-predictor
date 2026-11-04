@@ -49,15 +49,20 @@ export async function GET() {
   }> = [];
 
   if (startedMatchIds.length > 0) {
-    const { data, error } = await db
-      .from("predictions")
-      .select("match_id, home_pred, away_pred, points, player:players(name)")
-      .in("match_id", startedMatchIds)
-      .neq("player_id", player.id);
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    try {
+      othersPredictions = await fetchAllRows(() =>
+        db
+          .from("predictions")
+          .select("match_id, home_pred, away_pred, points, player:players(name)")
+          .in("match_id", startedMatchIds)
+          .neq("player_id", player.id)
+      );
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : String(error) },
+        { status: 500 }
+      );
     }
-    othersPredictions = (data || []) as unknown as typeof othersPredictions;
   }
 
   // For matches that haven't kicked off yet, tell the UI how many friends
