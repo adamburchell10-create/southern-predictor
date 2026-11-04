@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getCurrentPlayer } from "@/lib/player";
+import { fetchAllRows } from "@/lib/fetchAll";
 
 export const dynamic = "force-dynamic";
 
